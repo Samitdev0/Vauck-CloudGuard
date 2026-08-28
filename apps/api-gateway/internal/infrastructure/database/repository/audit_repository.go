@@ -1,0 +1,123 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/api/models"
+)
+
+type AuditRepository struct {
+	db *pgxpool.Pool
+}
+
+func NewAuditRepository(db *pgxpool.Pool) *AuditRepository {
+	return &AuditRepository{
+		db: db,
+	}
+}
+
+func (r *AuditRepository) Create(
+	ctx context.Context,
+	audit *models.AuditLog,
+) error {
+	const query = `
+		INSERT INTO audit_logs (
+			id,
+			tenant_id,
+			user_id,
+			action,
+			resource,
+			resource_id,
+			ip_address,
+			user_agent,
+			metadata,
+			created_at
+		)
+		VALUES (
+			$1,
+			$2,
+			$3,
+			$4,
+			$5,
+			$6,
+			$7,
+			$8,
+			$9,
+			$10
+		)
+	`
+
+	_, err := r.db.Exec(
+		ctx,
+		query,
+		audit.ID,
+		audit.TenantID,
+		audit.UserID,
+		audit.Action,
+		audit.Resource,
+		audit.ResourceID,
+		audit.IPAddress,
+		audit.UserAgent,
+		audit.Metadata,
+		audit.CreatedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("create audit log: %w", err)
+	}
+
+	return nil
+}
+
+func (r *AuditRepository) FindByID(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	id uuid.UUID,
+) (*models.AuditLog, error) {
+	const query = `
+		SELECT
+			id,
+			tenant_id,
+			user_id,
+			action,
+			resource,
+			resource_id,
+			ip_address,
+			user_agent,
+			metadata,
+			created_at
+		FROM audit_logs
+		WHERE tenant_id = $1
+		  AND id = $2
+	`
+
+	var audit models.AuditLog
+
+	err := r.db.QueryRow(
+		ctx,
+		query,
+		tenantID,
+		id,
+	).Scan(
+		&audit.ID,
+		&audit.TenantID,
+		&audit.UserID,
+		&audit.Action,
+		&audit.Resource,
+		&audit.ResourceID,
+		&audit.IPAddress,
+		&audit.UserAgent,
+		&audit.Metadata,
+		&audit.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("find audit log: %w", err)
+	}
+
+	return &audit, nil
+}

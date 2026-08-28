@@ -1,0 +1,13 @@
+{
+  "name": "cloudguard-sandbox",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/dashboard"
+  ],
+  "scripts": {
+    "dashboard": "npm --workspace apps/dashboard run dev",
+    "build": "npm --workspace apps/dashboard run build",
+    "lint": "npm --workspace apps/dashboard run lint"
+  }
+}

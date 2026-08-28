@@ -1,0 +1,30 @@
+app:
+  name: CloudGuard
+  service: api-gateway
+  version: 0.1.0
+  environment: production
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  readTimeout: 30
+  writeTimeout: 30
+  idleTimeout: 120
+
+logger:
+  level: info
+  pretty: false
+
+database:
+  host: postgres
+  port: 5432
+  user: cloudguard
+  password: cloudguard
+  name: cloudguard
+  sslmode: disable
+  maxOpen: 50
+  minOpen: 10
+
+  jwt:
+  secret: ""
+  issuer: "CloudGuard"

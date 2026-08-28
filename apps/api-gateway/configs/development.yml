@@ -1,0 +1,30 @@
+app:
+  name: CloudGuard
+  service: api-gateway
+  version: "0.1.0"
+  environment: development
+
+http:
+  host: 0.0.0.0
+  port: 8080
+  readTimeout: 30
+  writeTimeout: 30
+  idleTimeout: 120
+
+logger:
+  level: debug
+  pretty: true
+
+database:
+  host: localhost
+  port: 5432
+  user: cloudguard
+  password: cloudguard123
+  name: cloudguard
+  sslmode: disable
+  maxOpen: 20
+  minOpen: 5
+
+jwt:
+  secret: "cloudguard-secret-dev-change-me-please-32chars"
+  issuer: CloudGuard
