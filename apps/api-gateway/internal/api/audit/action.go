@@ -3,17 +3,20 @@ package audit
 import (
 	"net/http"
 	"strings"
+
+	"github.com/labstack/echo/v4"
 )
 
 type Action struct {
-	Name      string
-	Resource  string
-	Auditable bool
+	Name       string
+	Resource   string
+	ResourceID string
+	Auditable  bool
 }
 
-func ResolveAction(method, path string) Action {
-	method = strings.ToUpper(strings.TrimSpace(method))
-	path = strings.TrimSpace(path)
+func ResolveAction(c echo.Context) Action {
+	method := strings.ToUpper(strings.TrimSpace(c.Request().Method))
+	path := strings.TrimSpace(c.Path())
 
 	switch {
 	case path == "/health/live":
@@ -67,9 +70,10 @@ func ResolveAction(method, path string) Action {
 	}
 
 	return Action{
-		Name:      methodAction(method),
-		Resource:  resourceFromPath(path),
-		Auditable: true,
+		Name:       methodAction(method),
+		Resource:   resourceFromPath(path),
+		ResourceID: resourceID(c),
+		Auditable:  true,
 	}
 }
 
@@ -109,4 +113,22 @@ func resourceFromPath(path string) string {
 	}
 
 	return parts[0]
+}
+
+func resourceID(c echo.Context) string {
+	for _, name := range []string{
+		"id",
+		"userId",
+		"user_id",
+		"tenantId",
+		"tenant_id",
+		"resourceId",
+		"resource_id",
+	} {
+		if value := strings.TrimSpace(c.Param(name)); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }

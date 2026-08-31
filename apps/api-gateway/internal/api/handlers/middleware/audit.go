@@ -16,10 +16,7 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			err := next(c)
 
-			action := audit.ResolveAction(
-				c.Request().Method,
-				c.Path(),
-			)
+			action := audit.ResolveAction(c)
 
 			if !action.Auditable {
 				return err
@@ -29,11 +26,11 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 
 			auditLog := &models.AuditLog{
 				ID:         "",
+				TenantID:   "",
+				UserID:     nil,
 				Action:     action.Name,
 				Resource:   action.Resource,
 				ResourceID: nil,
-				TenantID:   "",
-				UserID:     nil,
 				Method:     auditContext.Method,
 				Path:       auditContext.Path,
 				StatusCode: c.Response().Status,
@@ -41,6 +38,11 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 				UserAgent:  auditContext.UserAgent,
 				Metadata:   []byte(`{}`),
 				CreatedAt:  time.Now().UTC(),
+			}
+
+			if action.ResourceID != "" {
+				resourceID := action.ResourceID
+				auditLog.ResourceID = &resourceID
 			}
 
 			if auditContext.IP != "" {
