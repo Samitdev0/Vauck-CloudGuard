@@ -14,8 +14,11 @@ import (
 func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			start := time.Now()
+
 			err := next(c)
 
+			duration := time.Since(start)
 			action := audit.ResolveAction(c)
 
 			if !action.Auditable {
@@ -23,6 +26,9 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 			}
 
 			auditContext := audit.FromEcho(c)
+
+			statusCode := c.Response().Status
+			outcome := auditOutcome(statusCode, err)
 
 			auditLog := &models.AuditLog{
 				ID:         "",
@@ -33,7 +39,7 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 				ResourceID: nil,
 				Method:     auditContext.Method,
 				Path:       auditContext.Path,
-				StatusCode: c.Response().Status,
+				StatusCode: statusCode,
 				IPAddress:  nil,
 				UserAgent:  auditContext.UserAgent,
 				Metadata:   []byte(`{}`),
@@ -51,15 +57,15 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 			}
 
 			metadata := map[string]any{
-				"request_id": auditContext.RequestID,
-				"method":     auditContext.Method,
-				"path":       auditContext.Path,
-				"action":     action.Name,
-				"resource":   action.Resource,
-				"status":     c.Response().Status,
-				"authenticated": audit.IsAuthenticated(
-					auditContext,
-				),
+				"request_id":    auditContext.RequestID,
+				"method":        auditContext.Method,
+				"path":          auditContext.Path,
+				"action":        action.Name,
+				"resource":      action.Resource,
+				"status":        statusCode,
+				"outcome":       outcome,
+				"duration_ms":   duration.Milliseconds(),
+				"authenticated": audit.IsAuthenticated(auditContext),
 			}
 
 			if action.ResourceID != "" {
@@ -87,6 +93,10 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 				metadata["user_agent"] = auditContext.UserAgent
 			}
 
+			if err != nil {
+				metadata["error"] = err.Error()
+			}
+
 			if data, marshalErr := json.Marshal(metadata); marshalErr == nil {
 				auditLog.Metadata = data
 			}
@@ -104,4 +114,16 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 			return err
 		}
 	}
+}
+
+func auditOutcome(statusCode int, err error) string {
+	if statusCode == 401 || statusCode == 403 {
+		return "denied"
+	}
+
+	if statusCode >= 400 || err != nil {
+		return "failure"
+	}
+
+	return "success"
 }
