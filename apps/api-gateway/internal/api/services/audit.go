@@ -15,6 +15,7 @@ import (
 var (
 	ErrAuditLogNil      = errors.New("audit log is nil")
 	ErrTenantIDRequired = errors.New("tenant id is required")
+	ErrAuditIDRequired  = errors.New("audit id is required")
 	ErrActionRequired   = errors.New("audit action is required")
 	ErrResourceRequired = errors.New("audit resource is required")
 )
@@ -52,7 +53,7 @@ func (s *AuditService) Create(
 	}
 
 	if audit.ID == "" {
-		audit.ID = uuid.New().String()
+		audit.ID = uuid.NewString()
 	}
 
 	if audit.CreatedAt.IsZero() {
@@ -68,15 +69,23 @@ func (s *AuditService) Create(
 
 func (s *AuditService) FindByID(
 	ctx context.Context,
-	tenantID uuid.UUID,
-	id uuid.UUID,
+	tenantID string,
+	id string,
 ) (*models.AuditLog, error) {
-	if tenantID == uuid.Nil {
-		return nil, errors.New("tenant id is required")
+	if tenantID == "" {
+		return nil, ErrTenantIDRequired
 	}
 
-	if id == uuid.Nil {
-		return nil, errors.New("audit id is required")
+	if id == "" {
+		return nil, ErrAuditIDRequired
+	}
+
+	if _, err := uuid.Parse(tenantID); err != nil {
+		return nil, fmt.Errorf("invalid tenant id: %w", err)
+	}
+
+	if _, err := uuid.Parse(id); err != nil {
+		return nil, fmt.Errorf("invalid audit id: %w", err)
 	}
 
 	audit, err := s.repository.FindByID(ctx, tenantID, id)

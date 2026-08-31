@@ -75,8 +75,8 @@ func (r *AuditRepository) Create(
 
 func (r *AuditRepository) FindByID(
 	ctx context.Context,
-	tenantID uuid.UUID,
-	id uuid.UUID,
+	tenantID string,
+	id string,
 ) (*models.AuditLog, error) {
 	const query = `
 		SELECT
@@ -95,13 +95,23 @@ func (r *AuditRepository) FindByID(
 		  AND id = $2
 	`
 
+	parsedTenantID, err := uuid.Parse(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("parse tenant id: %w", err)
+	}
+
+	parsedID, err := uuid.Parse(id)
+	if err != nil {
+		return nil, fmt.Errorf("parse audit id: %w", err)
+	}
+
 	var audit models.AuditLog
 
-	err := r.db.QueryRow(
+	err = r.db.QueryRow(
 		ctx,
 		query,
-		tenantID,
-		id,
+		parsedTenantID,
+		parsedID,
 	).Scan(
 		&audit.ID,
 		&audit.TenantID,
