@@ -16,12 +16,24 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			err := next(c)
 
+			action := audit.ResolveAction(
+				c.Request().Method,
+				c.Path(),
+			)
+
+			if !action.Auditable {
+				return err
+			}
+
 			auditContext := audit.FromEcho(c)
 
 			auditLog := &models.AuditLog{
 				ID:         "",
-				Action:     c.Request().Method,
-				Resource:   c.Path(),
+				Action:     action.Name,
+				Resource:   action.Resource,
+				ResourceID: nil,
+				TenantID:   "",
+				UserID:     nil,
 				Method:     auditContext.Method,
 				Path:       auditContext.Path,
 				StatusCode: c.Response().Status,
@@ -32,20 +44,23 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 			}
 
 			if auditContext.IP != "" {
-				auditLog.IPAddress = &auditContext.IP
-			}
-
-			if auditLog.Resource == "" {
-				auditLog.Resource = "unknown"
+				ip := auditContext.IP
+				auditLog.IPAddress = &ip
 			}
 
 			if auditContext.Identity != nil {
-				auditLog.TenantID = auditContext.Identity.TenantID
-				auditLog.UserID = &auditContext.Identity.UserID
+				tenantID := auditContext.Identity.TenantID
+				userID := auditContext.Identity.UserID
+
+				auditLog.TenantID = tenantID
+				auditLog.UserID = &userID
 			}
 
-			metadata := map[string]string{
+			metadata := map[string]any{
 				"request_id": auditContext.RequestID,
+				"method":     auditContext.Method,
+				"path":       auditContext.Path,
+				"status":     c.Response().Status,
 			}
 
 			if data, marshalErr := json.Marshal(metadata); marshalErr == nil {
