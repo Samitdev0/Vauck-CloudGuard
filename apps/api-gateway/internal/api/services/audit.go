@@ -20,12 +20,33 @@ var (
 	ErrResourceRequired = errors.New("audit resource is required")
 )
 
+type AuditRepository interface {
+	Create(
+		context.Context,
+		*models.AuditLog,
+	) error
+
+	FindByID(
+		context.Context,
+		string,
+		string,
+	) (*models.AuditLog, error)
+}
+
 type AuditService struct {
-	repository *repository.AuditRepository
+	repository AuditRepository
 }
 
 func NewAuditService(
 	repository *repository.AuditRepository,
+) *AuditService {
+	return &AuditService{
+		repository: repository,
+	}
+}
+
+func NewAuditServiceWithRepository(
+	repository AuditRepository,
 ) *AuditService {
 	return &AuditService{
 		repository: repository,
