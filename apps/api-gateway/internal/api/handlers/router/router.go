@@ -15,74 +15,44 @@ func NewRouter(
 	jwtService *auth.JWT,
 	auditService *services.AuditService,
 ) *echo.Echo {
-
 	e := echo.New()
 
-	// ==========================
-	// Global Error Handler
-	// ==========================
-
+	// Global error handling.
 	e.HTTPErrorHandler = apierrors.HTTPErrorHandler
 
-	// ==========================
-	// Global Middlewares
-	// ==========================
-
+	// Global middleware pipeline.
 	e.Use(apimiddleware.RequestID)
 	e.Use(apimiddleware.RequestLogger)
 	e.Use(apimiddleware.Recovery())
 	e.Use(apimiddleware.Security)
 	e.Use(apimiddleware.CORS)
 	e.Use(apimiddleware.RateLimit)
+	e.Use(apimiddleware.Audit(auditService))
 
-	// ==========================
-	// Audit Middleware
-	// ==========================
-
-	_ = auditService
-
-	// ==========================
-	// Public Routes
-	// ==========================
-
+	// Public routes.
 	routes.RegisterPublic(e)
 
-	// ==========================
-	// Health Routes
-	// ==========================
-
+	// Health routes.
 	routes.RegisterHealth(e)
 
-	// ==========================
-	// API v1
-	// ==========================
-
+	// API v1.
 	apiGroup := e.Group("/api")
 	v1 := apiGroup.Group("/v1")
 
-	// ==========================
-	// Authentication
-	// ==========================
-
+	// Authentication routes.
 	routes.RegisterAuth(
 		v1,
 		authService,
 		jwtService,
 	)
 
-	// ==========================
-	// Admin
-	// ==========================
-
+	// Administration routes.
 	routes.RegisterAdmin(
 		v1,
 		jwtService,
 	)
 
-	// ==========================
-	// Core API
-	// ==========================
-
+	// Core API routes.
 	routes.RegisterAPI(v1)
 
 	return e
