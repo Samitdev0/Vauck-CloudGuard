@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/api/models"
-	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/infrastructure/database/repository"
 )
 
 var (
@@ -21,33 +20,15 @@ var (
 )
 
 type AuditRepository interface {
-	Create(
-		context.Context,
-		*models.AuditLog,
-	) error
-
-	FindByID(
-		context.Context,
-		string,
-		string,
-	) (*models.AuditLog, error)
+	Create(context.Context, *models.AuditLog) error
+	FindByID(context.Context, string, string) (*models.AuditLog, error)
 }
 
 type AuditService struct {
 	repository AuditRepository
 }
 
-func NewAuditService(
-	repository *repository.AuditRepository,
-) *AuditService {
-	return &AuditService{
-		repository: repository,
-	}
-}
-
-func NewAuditServiceWithRepository(
-	repository AuditRepository,
-) *AuditService {
+func NewAuditService(repository AuditRepository) *AuditService {
 	return &AuditService{
 		repository: repository,
 	}
@@ -109,7 +90,11 @@ func (s *AuditService) FindByID(
 		return nil, fmt.Errorf("invalid audit id: %w", err)
 	}
 
-	audit, err := s.repository.FindByID(ctx, tenantID, id)
+	audit, err := s.repository.FindByID(
+		ctx,
+		tenantID,
+		id,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("find audit log: %w", err)
 	}
