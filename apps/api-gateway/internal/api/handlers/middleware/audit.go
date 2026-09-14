@@ -27,6 +27,10 @@ func Audit(auditService *services.AuditService) echo.MiddlewareFunc {
 
 			auditContext := audit.FromEcho(c)
 
+			if auditContext.Identity == nil {
+				return err
+			}
+
 			statusCode := c.Response().Status
 			outcome := auditOutcome(statusCode, err)
 

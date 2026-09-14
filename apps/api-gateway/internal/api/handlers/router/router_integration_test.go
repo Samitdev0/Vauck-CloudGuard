@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/labstack/echo/v4"
 
 	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/api/auth"
 	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/api/models"
@@ -13,16 +16,17 @@ import (
 )
 
 type routerAuditRepository struct {
-	createdAudit *models.AuditLog
-	createCalled bool
+	createdAudits []*models.AuditLog
 }
 
 func (r *routerAuditRepository) Create(
 	_ context.Context,
 	audit *models.AuditLog,
 ) error {
-	r.createCalled = true
-	r.createdAudit = audit
+	r.createdAudits = append(
+		r.createdAudits,
+		audit,
+	)
 
 	return nil
 }
@@ -35,7 +39,9 @@ func (r *routerAuditRepository) FindByID(
 	return nil, nil
 }
 
-func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
+func newRouterTestJWT(t *testing.T) *auth.JWT {
+	t.Helper()
+
 	jwtService, err := auth.NewJWT(config.JWTConfig{
 		Secret: "cloudguard-test-secret-12345678901234567890",
 		Issuer: "CloudGuard",
@@ -46,6 +52,16 @@ func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
 			err,
 		)
 	}
+
+	return jwtService
+}
+
+func newRouterTest(
+	t *testing.T,
+) (*auth.JWT, *routerAuditRepository, *echo.Echo) {
+	t.Helper()
+
+	jwtService := newRouterTestJWT(t)
 
 	repository := &routerAuditRepository{}
 
@@ -59,11 +75,24 @@ func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
 		auditService,
 	)
 
+	return jwtService, repository, router
+}
+
+func generateRouterTestToken(
+	t *testing.T,
+	jwtService *auth.JWT,
+	userID string,
+	tenantID string,
+	email string,
+	role auth.Role,
+) string {
+	t.Helper()
+
 	token, err := jwtService.GenerateToken(
-		"550e8400-e29b-41d4-a716-446655440001",
-		"550e8400-e29b-41d4-a716-446655440000",
-		"admin@cloudguard.test",
-		string(auth.RoleAdmin),
+		userID,
+		tenantID,
+		email,
+		string(role),
 	)
 	if err != nil {
 		t.Fatalf(
@@ -71,6 +100,21 @@ func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
 			err,
 		)
 	}
+
+	return token
+}
+
+func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
+	jwtService, repository, router := newRouterTest(t)
+
+	token := generateRouterTestToken(
+		t,
+		jwtService,
+		"550e8400-e29b-41d4-a716-446655440001",
+		"550e8400-e29b-41d4-a716-446655440000",
+		"admin@cloudguard.test",
+		auth.RoleAdmin,
+	)
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -100,19 +144,14 @@ func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
 		)
 	}
 
-	if !repository.createCalled {
-		t.Fatal(
-			"expected audit repository Create to be called",
+	if len(repository.createdAudits) != 1 {
+		t.Fatalf(
+			"expected 1 audit log, got %d",
+			len(repository.createdAudits),
 		)
 	}
 
-	if repository.createdAudit == nil {
-		t.Fatal(
-			"expected audit log to be created",
-		)
-	}
-
-	audit := repository.createdAudit
+	audit := repository.createdAudits[0]
 
 	if audit.TenantID != "550e8400-e29b-41d4-a716-446655440000" {
 		t.Fatalf(
@@ -170,7 +209,7 @@ func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
 
 	if audit.StatusCode != http.StatusOK {
 		t.Fatalf(
-			"expected status %d, got %d",
+			"expected audit status %d, got %d",
 			http.StatusOK,
 			audit.StatusCode,
 		)
@@ -187,6 +226,150 @@ func TestNewRouterAuditsAuthenticatedAdminRequest(t *testing.T) {
 	if audit.CreatedAt.IsZero() {
 		t.Fatal(
 			"expected audit CreatedAt to be populated",
+		)
+	}
+
+	var metadata map[string]any
+
+	if err := json.Unmarshal(
+		audit.Metadata,
+		&metadata,
+	); err != nil {
+		t.Fatalf(
+			"failed to decode audit metadata: %v",
+			err,
+		)
+	}
+
+	if metadata["outcome"] != "success" {
+		t.Fatalf(
+			"expected audit outcome %q, got %v",
+			"success",
+			metadata["outcome"],
+		)
+	}
+
+	if metadata["authenticated"] != true {
+		t.Fatalf(
+			"expected authenticated metadata to be true, got %v",
+			metadata["authenticated"],
+		)
+	}
+}
+
+func TestNewRouterRejectsUnauthenticatedAdminRequest(t *testing.T) {
+	_, repository, router := newRouterTest(t)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/admin/me",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusUnauthorized,
+			rec.Code,
+		)
+	}
+
+	if len(repository.createdAudits) != 0 {
+		t.Fatalf(
+			"expected no audit log for unauthenticated request, got %d",
+			len(repository.createdAudits),
+		)
+	}
+}
+
+func TestNewRouterRejectsNonAdminRequest(t *testing.T) {
+	jwtService, repository, router := newRouterTest(t)
+
+	token := generateRouterTestToken(
+		t,
+		jwtService,
+		"550e8400-e29b-41d4-a716-446655440002",
+		"550e8400-e29b-41d4-a716-446655440000",
+		"user@cloudguard.test",
+		auth.RoleUser,
+	)
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/admin/me",
+		nil,
+	)
+
+	req.Header.Set(
+		"Authorization",
+		"Bearer "+token,
+	)
+
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf(
+			"expected status %d, got %d",
+			http.StatusForbidden,
+			rec.Code,
+		)
+	}
+
+	if len(repository.createdAudits) != 1 {
+		t.Fatalf(
+			"expected 1 audit log, got %d",
+			len(repository.createdAudits),
+		)
+	}
+
+	audit := repository.createdAudits[0]
+
+	if audit.TenantID != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf(
+			"expected tenant ID %q, got %q",
+			"550e8400-e29b-41d4-a716-446655440000",
+			audit.TenantID,
+		)
+	}
+
+	if audit.StatusCode != http.StatusForbidden {
+		t.Fatalf(
+			"expected audit status %d, got %d",
+			http.StatusForbidden,
+			audit.StatusCode,
+		)
+	}
+
+	var metadata map[string]any
+
+	if err := json.Unmarshal(
+		audit.Metadata,
+		&metadata,
+	); err != nil {
+		t.Fatalf(
+			"failed to decode audit metadata: %v",
+			err,
+		)
+	}
+
+	if metadata["outcome"] != "denied" {
+		t.Fatalf(
+			"expected audit outcome %q, got %v",
+			"denied",
+			metadata["outcome"],
+		)
+	}
+
+	if metadata["authenticated"] != true {
+		t.Fatalf(
+			"expected authenticated metadata to be true, got %v",
+			metadata["authenticated"],
 		)
 	}
 }
