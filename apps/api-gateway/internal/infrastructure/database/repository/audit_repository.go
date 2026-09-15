@@ -2,16 +2,20 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/api/models"
 )
 
+var ErrAuditNotFound = errors.New("audit log not found")
+
 type AuditRepository struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
 func NewAuditRepository(db *pgxpool.Pool) *AuditRepository {
@@ -124,6 +128,10 @@ func (r *AuditRepository) FindByID(
 		&audit.Metadata,
 		&audit.CreatedAt,
 	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrAuditNotFound
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("find audit log: %w", err)

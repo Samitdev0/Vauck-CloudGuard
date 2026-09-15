@@ -7,6 +7,7 @@ import (
 
 	"github.com/Samitdev0/cloudguard-sandbox/apps/api-gateway/internal/api/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -14,8 +15,13 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 )
 
+type DBTX interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 type UserRepository struct {
-	db *pgxpool.Pool
+	db DBTX
 }
 
 func NewUserRepository(db *pgxpool.Pool) *UserRepository {
@@ -28,7 +34,6 @@ func (r *UserRepository) Create(
 	ctx context.Context,
 	user *models.User,
 ) error {
-
 	query := `
 		INSERT INTO users (
 			tenant_id,
@@ -71,9 +76,9 @@ func (r *UserRepository) Create(
 
 func (r *UserRepository) FindByID(
 	ctx context.Context,
+	tenantID string,
 	id string,
 ) (*models.User, error) {
-
 	query := `
 		SELECT
 			id,
@@ -88,6 +93,7 @@ func (r *UserRepository) FindByID(
 			updated_at
 		FROM users
 		WHERE id = $1
+		  AND tenant_id = $2
 	`
 
 	var user models.User
@@ -96,6 +102,7 @@ func (r *UserRepository) FindByID(
 		ctx,
 		query,
 		id,
+		tenantID,
 	).Scan(
 		&user.ID,
 		&user.TenantID,
@@ -125,7 +132,6 @@ func (r *UserRepository) FindByEmail(
 	tenantID string,
 	email string,
 ) (*models.User, error) {
-
 	query := `
 		SELECT
 			id,
@@ -178,7 +184,6 @@ func (r *UserRepository) Update(
 	ctx context.Context,
 	user *models.User,
 ) error {
-
 	query := `
 		UPDATE users
 		SET
@@ -225,7 +230,6 @@ func (r *UserRepository) Delete(
 	tenantID string,
 	id string,
 ) error {
-
 	query := `
 		DELETE FROM users
 		WHERE id = $1
